@@ -1,0 +1,571 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1" />
+<title>RO→RU Trainer — Anki SM-2 (full)</title>
+<meta name="theme-color" content="#0b0f14" />
+<style>
+  :root{--bg:#0b0f14;--fg:#e6e9ef;--muted:#9aa4b2;--card:#121720;--acc:#4ea4ff;--ok:#35c26b;--warn:#ffd166;--bad:#ff6b6b}
+  *{box-sizing:border-box}
+  body{margin:0;font-family:system-ui,-apple-system,Segoe UI,Roboto,Inter,Arial;background:var(--bg);color:var(--fg)}
+  header{position:sticky;top:0;z-index:3;backdrop-filter:blur(8px);background:rgba(11,15,20,.8);border-bottom:1px solid #1c2533}
+  .bar{display:flex;align-items:center;gap:.6rem;padding:.7rem .9rem;flex-wrap:wrap}
+  h1{font-size:1.05rem;margin:0;font-weight:700}
+  .grow{flex:1;min-width:80px}
+  button,select,input{background:#0f1520;color:var(--fg);border:1px solid #202a3a;border-radius:14px;padding:.6rem .85rem;font-size:1rem}
+  button{cursor:pointer}
+  button.primary{background:var(--acc);color:#04111f;border:none;font-weight:700}
+  button.ghost{background:transparent;border:1px solid #243044}
+  button.sm{padding:.45rem .7rem;font-size:.9rem;border-radius:12px}
+  .wrap{max-width:900px;margin:0 auto;padding:1rem}
+  .cards{display:grid;gap:.9rem}
+  .card{background:var(--card);border:1px solid #1b2330;border-radius:18px;padding:1rem}
+  .row{display:flex;gap:.6rem;align-items:center;flex-wrap:wrap}
+  .row.right{justify-content:flex-end}
+  .muted{color:var(--muted)}
+  .pill{padding:.25rem .6rem;border:1px solid #253347;border-radius:999px;font-size:.75rem}
+  .tabs{display:flex;gap:.5rem;flex-wrap:wrap;margin:.6rem 0}
+  .tab{padding:.55rem .8rem;border-radius:12px;border:1px solid #243044;background:#0d1420;cursor:pointer;font-weight:600}
+  .tab.active{background:var(--acc);color:#04111f;border-color:transparent}
+  .center{display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center}
+  .big{font-size:1.5rem;font-weight:700}
+  .xxl{font-size:2rem;font-weight:800}
+  .hr{height:1px;background:#1b2330;margin:.8rem 0}
+  .hidden{display:none}
+  input[type="file"]{padding:.45rem}
+  .mc-grid{display:grid;gap:.6rem;grid-template-columns:1fr 1fr}
+  .mc-grid button{min-height:56px}
+  .kbd{font-family:ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;background:#0a101a;border:1px solid #1c2635;border-radius:8px;padding:.1rem .35rem}
+  .toast{position:fixed;bottom:12px;left:0;right:0;margin:auto;width:max(280px, 50%);background:#101724;border:1px solid #1f2938;color:var(--fg);padding:.8rem 1rem;border-radius:12px;text-align:center;display:none}
+  .modebtn{min-width:148px}
+  .activeDir{outline:2px solid var(--acc)}
+  @media (max-width:640px){ .mc-grid{grid-template-columns:1fr} }
+</style>
+</head>
+<body>
+<header>
+  <div class="bar">
+    <h1>RO↔RU Тренажёр</h1>
+    <span class="pill muted" id="duePill">К повтору: 0</span>
+    <span class="pill" id="dirPill">Режим: RO→RU</span>
+    <div class="grow"></div>
+
+    <!-- Крупный старт с нужным направлением -->
+    <button class="sm primary modebtn" id="startRO2RU" title="Запустить повтор RO→RU">Повтор RO→RU</button>
+    <button class="sm ghost modebtn" id="startRU2RO" title="Запустить проверку RU→RO">Повтор RU→RO</button>
+
+    <!-- Доп. переключатели и сервисные -->
+    <button class="sm ghost" id="btnLeech" title="Только тяжёлые слова (leech)">Leech</button>
+    <button class="sm ghost" id="btnExport">Экспорт</button>
+    <label class="sm ghost" for="fileImport" style="cursor:pointer">Импорт</label>
+    <input id="fileImport" type="file" accept=".csv,.json" class="hidden">
+    <button class="sm" id="btnSettings">Настройки</button>
+  </div>
+</header>
+
+<div class="wrap">
+  <div class="tabs" id="modeTabs">
+    <div class="tab active" data-mode="review">Флеш-карты</div>
+    <div class="tab" data-mode="choice">Выбор перевода</div>
+    <div class="tab" data-mode="dictate">Диктант</div>
+    <div class="tab" data-mode="manage">База и прогресс</div>
+  </div>
+
+  <!-- REVIEW -->
+  <div id="screen-review" class="cards">
+    <div class="card center" id="reviewCard">
+      <div class="muted">Карточка</div>
+      <div class="xxl" id="qText">—</div>
+      <div class="hr"></div>
+      <button id="btnShow" class="primary">Показать ответ</button>
+      <div id="aBlock" class="hidden">
+        <div id="aText" class="big" style="margin:.4rem 0 .7rem"></div>
+        <div class="row center">
+          <button data-grade="0" class="ghost" title="Again">Again</button>
+          <button data-grade="3" class="ghost" title="Hard">Hard</button>
+          <button data-grade="4" class="ghost" title="Good">Good</button>
+          <button data-grade="5" class="primary" title="Easy">Easy</button>
+        </div>
+      </div>
+      <div class="row" style="margin-top:.6rem">
+        <button id="btnTTS" class="ghost">Озвучить RO</button>
+        <span class="muted">Anki-style SM-2: steps, easy bonus, hard interval, fuzz, lapse steps</span>
+      </div>
+    </div>
+  </div>
+
+  <!-- CHOICE -->
+  <div id="screen-choice" class="cards hidden">
+    <div class="card">
+      <div class="row"><div class="muted">Выбери перевод</div><div class="grow"></div><button id="choiceSpeak" class="ghost sm">▶︎</button></div>
+      <div class="xxl" id="choiceQ">—</div>
+      <div class="mc-grid" id="choiceOptions"></div>
+      <div id="choiceFeedback" class="row muted" style="margin-top:.6rem"></div>
+    </div>
+  </div>
+
+  <!-- DICTATE -->
+  <div id="screen-dictate" class="cards hidden">
+    <div class="card">
+      <div class="row"><div class="muted">Диктант</div><div class="grow"></div><button id="dictSpeak" class="ghost sm">▶︎</button></div>
+      <div id="dictQ" class="big" style="margin:.2rem 0 .6rem">—</div>
+      <input id="dictInput" placeholder="Ответ" />
+      <div class="row right" style="margin-top:.6rem">
+        <button id="dictCheck" class="primary">Проверить</button>
+      </div>
+      <div id="dictFeedback" class="muted" style="margin-top:.6rem"></div>
+    </div>
+  </div>
+
+  <!-- MANAGE -->
+  <div id="screen-manage" class="cards hidden">
+    <div class="card">
+      <div class="row"><div class="big">База слов</div><div class="grow"></div><button id="btnAdd" class="sm">Добавить</button></div>
+      <div class="hr"></div>
+      <div class="muted" style="margin-bottom:.6rem">CSV: <span class="kbd">front(ro)</span>, <span class="kbd">back(ru)</span>. Разделитель: запятая / «;» / таб.</div>
+      <div id="list"></div>
+    </div>
+
+    <div class="card">
+      <div class="big">Статистика</div>
+      <div class="row" style="gap:.6rem;flex-wrap:wrap;margin-top:.6rem">
+        <div class="pill">Всего: <span id="stTotal">0</span></div>
+        <div class="pill">К повтору: <span id="stDue">0</span></div>
+        <div class="pill">Выучено: <span id="stMature">0</span></div>
+        <div class="pill">Верно (сессия): <span id="stCorrect">0</span></div>
+        <div class="pill">Leech: <span id="stLeech">0</span></div>
+      </div>
+    </div>
+
+    <div class="card">
+      <div class="big">Настройки</div>
+      <div class="row" style="gap:1rem;align-items:center;margin-top:.6rem">
+        <label>Голос TTS <select id="voiceSel"></select></label>
+        <label>Громкость <input id="vol" type="range" min="0" max="1" step="0.05" value="1"></label>
+        <label>Скорость <input id="rate" type="range" min="0.6" max="1.4" step="0.05" value="1"></label>
+      </div>
+      <div class="row" style="gap:1rem;flex-wrap:wrap;margin-top:.6rem">
+        <span class="pill muted">Steps: <span id="stepsInfo"></span>; Lapse steps: <span id="lapseStepsInfo"></span></span>
+        <span class="pill muted">Easy bonus: <span id="easyInfo"></span>; Hard interval: <span id="hardInfo"></span>; Max ivl: <span id="maxInfo"></span>d</span>
+      </div>
+      <div class="row right" style="margin-top:.6rem">
+        <button id="btnWipe" class="ghost">Сбросить базу</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== Anki-параметры (стандарт) ===== */
+const STEPS_MIN = [1, 10];        // learning steps (минуты)
+const GRADUATING_IVL_D = 1;       // выпуск по Good → 1 день
+const EASY_IVL_D = 4;             // новая карта по Easy → 4 дня
+const LAPSE_STEPS_MIN = [10];     // шаг(и) после ошибки в ревью (мин)
+const EASY_BONUS = 1.3;
+const HARD_IVL_FACTOR = 1.2;
+const INTERVAL_MODIFIER = 1.0;
+const MAX_INTERVAL_D = 36500;
+const MIN_EF = 1.3;
+
+/* ===== Fuzz для интервалов >2 дней ===== */
+function applyFuzz(ivlDays) {
+  if (ivlDays < 2) return ivlDays;
+  let pct = 0.05;
+  if (ivlDays >= 7 && ivlDays < 30) pct = 0.10;
+  else if (ivlDays >= 30) pct = 0.15;
+  const delta = ivlDays * pct;
+  const min = Math.max(1, Math.round(ivlDays - delta));
+  const max = Math.round(ivlDays + delta);
+  return Math.floor(Math.random() * (max - min + 1)) + min;
+}
+
+/* ===== Хранилище/модель ===== */
+const LS_KEY = 'ro_ru_trainer_cards_v3';
+let cards = [];
+let session = { correct:0 };
+let reviewDirection = localStorage.getItem('rr_dir') || 'ro2ru'; // 'ro2ru' | 'ru2ro'
+let leechOnly = false;
+const LEECH_LAPSES = 3;
+
+const seed = [
+  ['Bună dimineața','Доброе утро'],
+  ['Mulțumesc','Спасибо'],
+  ['Unde este stația de autobuz?','Где автобусная остановка?'],
+  ['Cât costă?','Сколько стоит?'],
+  ['Îmi pare rău','Извините'],
+];
+
+function isoToday(){ return new Date().toISOString().slice(0,10); }
+function todayMidnight(){ const d=new Date(); d.setHours(0,0,0,0); return d; }
+function addDays(d, days){ const x=new Date(d); x.setDate(x.getDate()+days); return x; }
+
+function save(){ localStorage.setItem(LS_KEY, JSON.stringify(cards)); updateDuePill(); updateStats(); }
+function load(){
+  try{ const raw=localStorage.getItem(LS_KEY); if(raw) cards=JSON.parse(raw); if(!cards.length) initSeed(); }
+  catch(e){ initSeed(); }
+  updateDuePill(); syncDirUI();
+}
+function initSeed(){
+  cards = seed.map((x,i)=>({
+    id:'seed'+i, ro:x[0], ru:x[1],
+    state:'new', stepIndex:0,
+    ef:2.5, ivl:0, reps:0, lapses:0, leech:false,
+    dueISO: isoToday()
+  }));
+  save();
+}
+
+/* ===== Очереди ===== */
+function updateDuePill(){ document.getElementById('duePill').textContent = 'К повтору: ' + dueCards().length; }
+function dueCards(){
+  const t = todayMidnight().getTime();
+  return cards.filter(c=> (!leechOnly || c.leech) && new Date(c.dueISO).getTime() <= t);
+}
+function pickDueOrRandom(){
+  const d = dueCards();
+  if (d.length) return d[Math.floor(Math.random()*d.length)];
+  const pool = leechOnly ? cards.filter(c=>c.leech) : cards;
+  if (pool.length) return pool[Math.floor(Math.random()*pool.length)];
+  return null;
+}
+
+/* ===== Алгоритм планирования (Anki-style SM-2) ===== */
+function updateEF(card, grade){
+  if (grade >= 3){
+    const delta = (0.1 - (5 - grade) * (0.08 + (5 - grade) * 0.02));
+    card.ef = Math.max(MIN_EF, card.ef + delta);
+  } else {
+    card.ef = Math.max(MIN_EF, card.ef - 0.2);
+  }
+}
+function scheduleInMinutes(card, minutes){
+  // Мы ведём due на уровне дня. Для корректности шагов достаточно «сегодня».
+  const next = new Date();
+  next.setMinutes(next.getMinutes() + minutes);
+  card.dueISO = next.toISOString().slice(0,10);
+}
+function gradeCard(card, grade){
+  const today = new Date();
+
+  // NEW/LEARNING
+  if (card.state === 'new' || card.state === 'learning'){
+    if (grade === 0){ // Again
+      card.state = 'learning';
+      card.stepIndex = 0;
+      scheduleInMinutes(card, STEPS_MIN[0] || 1);
+      return;
+    }
+    if (grade === 5){ // Easy — выпуск с EASY_IVL_D
+      card.state = 'review';
+      card.ivl = EASY_IVL_D;
+      card.reps = 1;
+      card.dueISO = addDays(today, applyFuzz(Math.min(MAX_INTERVAL_D, Math.round(card.ivl * INTERVAL_MODIFIER)))).toISOString().slice(0,10);
+      updateEF(card, grade);
+      return;
+    }
+    if (grade === 3 || grade === 4){ // Hard/Good — шаги обучения
+      const nextIndex = card.stepIndex + 1;
+      if (nextIndex < STEPS_MIN.length){
+        card.state = 'learning';
+        card.stepIndex = nextIndex;
+        scheduleInMinutes(card, STEPS_MIN[nextIndex]);
+      } else {
+        card.state = 'review';
+        card.ivl = GRADUATING_IVL_D; // выпуск по Good
+        card.reps = 1;
+        card.dueISO = addDays(today, applyFuzz(Math.min(MAX_INTERVAL_D, Math.round(card.ivl * INTERVAL_MODIFIER)))).toISOString().slice(0,10);
+        updateEF(card, grade);
+      }
+      return;
+    }
+  }
+
+  // REVIEW
+  if (card.state === 'review'){
+    if (grade === 0){ // Again → lapse
+      card.lapses += 1;
+      if (card.lapses >= LEECH_LAPSES) card.leech = true;
+      if (LAPSE_STEPS_MIN.length){
+        card.state = 'learning';
+        card.stepIndex = 0;
+        scheduleInMinutes(card, LAPSE_STEPS_MIN[0]);
+      } else {
+        card.ivl = 1;
+        card.dueISO = addDays(today, 1).toISOString().slice(0,10);
+      }
+      updateEF(card, grade);
+      return;
+    }
+
+    let newIvl;
+    if (grade === 3){ // Hard
+      newIvl = Math.max(1, Math.round(card.ivl * HARD_IVL_FACTOR * INTERVAL_MODIFIER));
+    } else if (grade === 4){ // Good
+      newIvl = Math.round(card.ivl * card.ef * INTERVAL_MODIFIER);
+    } else { // Easy
+      newIvl = Math.round(card.ivl * card.ef * EASY_BONUS * INTERVAL_MODIFIER);
+    }
+    newIvl = Math.min(MAX_INTERVAL_D, applyFuzz(newIvl));
+    card.ivl = Math.max(1, newIvl);
+    card.reps += 1;
+    card.dueISO = addDays(today, card.ivl).toISOString().slice(0,10);
+    updateEF(card, grade);
+    return;
+  }
+}
+
+/* ===== REVIEW UI ===== */
+let current=null;
+function setupReview(){
+  current = pickDueOrRandom();
+  const q=document.getElementById('qText');
+  const a=document.getElementById('aText');
+  const aBlock=document.getElementById('aBlock');
+  aBlock.classList.add('hidden');
+  document.getElementById('btnShow').classList.remove('hidden');
+  if(!current){ q.textContent='Нет карточек'; a.textContent=''; return; }
+  const qSide = reviewDirection==='ro2ru' ? current.ro : current.ru;
+  const aSide = reviewDirection==='ro2ru' ? current.ru : current.ro;
+  q.textContent = qSide;
+  a.textContent = aSide;
+}
+document.getElementById('btnShow').onclick=()=>{
+  document.getElementById('aBlock').classList.remove('hidden');
+  document.getElementById('btnShow').classList.add('hidden');
+};
+document.querySelectorAll('#reviewCard [data-grade]').forEach(b=>{
+  b.addEventListener('click',()=>{
+    if(!current) return;
+    const g = parseInt(b.dataset.grade,10);
+    const wasDue = new Date(current.dueISO).getTime() <= todayMidnight().getTime();
+    gradeCard(current, g);
+    save();
+    if(wasDue && g>=3) { session.correct++; updateStats(); }
+    setupReview();
+  });
+});
+
+/* ===== CHOICE ===== */
+let choiceAns=null;
+function setupChoice(){
+  const qEl = document.getElementById('choiceQ');
+  const box = document.getElementById('choiceOptions');
+  const fb = document.getElementById('choiceFeedback');
+  fb.textContent=''; box.innerHTML='';
+  if(cards.length<4){ qEl.textContent='Недостаточно карточек (нужно ≥ 4)'; return; }
+  const q = cards[Math.floor(Math.random()*cards.length)];
+  const question = (reviewDirection==='ro2ru' ? q.ro : q.ru);
+  const answer = (reviewDirection==='ro2ru' ? q.ru : q.ro);
+  qEl.textContent = question; choiceAns = answer;
+  const opts = new Set([answer]);
+  while(opts.size<4){
+    const other = cards[Math.floor(Math.random()*cards.length)];
+    opts.add(reviewDirection==='ro2ru' ? other.ru : other.ro);
+  }
+  [...opts].sort(()=>Math.random()-0.5).forEach(txt=>{
+    const btn=document.createElement('button'); btn.className='ghost'; btn.textContent=txt;
+    btn.onclick=()=>{
+      if(txt===choiceAns){ fb.textContent='Верно'; fb.style.color='var(--ok)'; session.correct++; }
+      else{ fb.textContent=`Неверно. Правильно: ${choiceAns}`; fb.style.color='var(--bad)'; }
+      setTimeout(setupChoice, 900);
+    };
+    box.appendChild(btn);
+  });
+}
+document.getElementById('choiceSpeak').onclick=()=>{ const t=document.getElementById('choiceQ').textContent; speak(t); };
+
+/* ===== DICTATE ===== */
+let dictQ=null;
+function normalize(s){ return (s||'').toLowerCase().replace(/\s+/g,' ').trim(); }
+function setupDict(){
+  dictQ = cards[Math.floor(Math.random()*cards.length)]||null;
+  document.getElementById('dictQ').textContent = dictQ
+    ? (reviewDirection==='ro2ru' ? dictQ.ro : dictQ.ru)
+    : 'Нет карточек';
+  document.getElementById('dictInput').value='';
+  document.getElementById('dictFeedback').textContent='';
+  document.getElementById('dictInput').placeholder = reviewDirection==='ro2ru'
+    ? 'Перевод на русский'
+    : 'Перевод на румынский';
+}
+document.getElementById('dictSpeak').onclick=()=>{ const t=document.getElementById('dictQ').textContent; speak(t); };
+document.getElementById('dictCheck').onclick=()=>{
+  const v = document.getElementById('dictInput').value.trim();
+  const fb = document.getElementById('dictFeedback');
+  if(!dictQ) return;
+  const correct = normalize(reviewDirection==='ro2ru' ? dictQ.ru : dictQ.ro);
+  if(normalize(v)===correct){ fb.textContent='Верно'; fb.style.color='var(--ok)'; session.correct++; }
+  else{ fb.textContent=`Неверно. Правильно: ${reviewDirection==='ro2ru' ? dictQ.ru : dictQ.ro}`; fb.style.color='var(--bad)'; }
+  setTimeout(setupDict, 900);
+};
+
+/* ===== Управление базой ===== */
+function renderList(){
+  const box=document.getElementById('list'); box.innerHTML='';
+  cards.forEach(c=>{
+    const row=document.createElement('div'); row.className='row'; row.style.marginBottom='.4rem';
+    const left=document.createElement('div'); left.className='grow';
+    left.innerHTML = `<span class="kbd">${escapeHtml(c.ro)}</span> → ${escapeHtml(c.ru)}
+      <span class="muted">[${c.state}${c.leech?' • leech':''}; EF ${c.ef.toFixed(2)}, ivl ${c.ivl}, lapses ${c.lapses}, due ${c.dueISO}]</span>`;
+    const clearLeech=document.createElement('button'); clearLeech.className='sm ghost'; clearLeech.textContent='Leech−';
+    clearLeech.onclick=()=>{ c.leech=false; save(); renderList(); };
+    const del=document.createElement('button'); del.className='sm ghost'; del.textContent='Удалить';
+    del.onclick=()=>{ cards = cards.filter(x=>x.id!==c.id); save(); renderList(); };
+    row.append(left, clearLeech, del); box.appendChild(row);
+  });
+}
+function escapeHtml(s){ return (s||'').replace(/[&<>\"']/g, m=>({"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","'":"&#39;"}[m])); }
+function updateStats(){
+  document.getElementById('stTotal').textContent = cards.length;
+  document.getElementById('stDue').textContent = dueCards().length;
+  document.getElementById('stMature').textContent = cards.filter(c=>c.state==='review' && c.reps>=5).length;
+  document.getElementById('stCorrect').textContent = session.correct;
+  document.getElementById('stLeech').textContent = cards.filter(c=>c.leech).length;
+  document.getElementById('stepsInfo').textContent = STEPS_MIN.join('m');
+  document.getElementById('lapseStepsInfo').textContent = LAPSE_STEPS_MIN.join('m');
+  document.getElementById('easyInfo').textContent = EASY_BONUS;
+  document.getElementById('hardInfo').textContent = HARD_IVL_FACTOR;
+  document.getElementById('maxInfo').textContent = MAX_INTERVAL_D;
+}
+
+/* ===== Импорт/Экспорт ===== */
+const fileImport=document.getElementById('fileImport');
+fileImport.addEventListener('change', async (e)=>{
+  const f=e.target.files[0]; if(!f) return; const txt=await f.text();
+  if(f.name.endsWith('.json')){
+    try{ const arr=JSON.parse(txt); importFromJSON(arr); toast('Импорт JSON: '+arr.length); }catch(err){ toast('Ошибка JSON'); }
+    return;
+  }
+  const arr=parseCSVFlexible(txt); importPairs(arr);
+});
+function parseCSVFlexible(text){
+  let sep=',';
+  if(count(text,'\t')>count(text,',') && count(text,'\t')>count(text,';')) sep='\t';
+  else if(count(text,';')>count(text,',')) sep=';';
+  return text.split(/\r?\n/).map(l=>l.trim()).filter(Boolean)
+    .map(l=>l.split(sep)).filter(r=>r.length>=2).map(r=>[r[0], r[1]]);
+}
+function count(t, ch){ return t.split(ch).length; }
+function importPairs(pairs){
+  let added=0;
+  pairs.forEach(([ro,ru])=>{
+    ro=(ro||'').trim(); ru=(ru||'').trim(); if(!ro||!ru) return;
+    const id='c_'+hash(ro+'|'+ru);
+    if(cards.some(c=>c.id===id)) return;
+    cards.push({id, ro, ru, state:'new', stepIndex:0, ef:2.5, ivl:0, reps:0, lapses:0, leech:false, dueISO:isoToday()});
+    added++;
+  });
+  save(); renderList(); toast('Импортировано: '+added);
+}
+function importFromJSON(arr){
+  if(!Array.isArray(arr)) return; let added=0;
+  arr.forEach(o=>{
+    if(!o.ro||!o.ru) return;
+    const id='c_'+hash(o.ro+'|'+o.ru);
+    if(cards.some(c=>c.id===id)) return;
+    cards.push({
+      id, ro:o.ro, ru:o.ru,
+      state:o.state||'new', stepIndex:o.stepIndex||0,
+      ef:o.ef||2.5, ivl:o.ivl||0, reps:o.reps||0, lapses:o.lapses||0, leech:!!o.leech,
+      dueISO:o.dueISO||isoToday()
+    }); added++;
+  });
+  save(); renderList(); toast('Импорт JSON: '+added);
+}
+function exportJSON(){
+  const blob=new Blob([JSON.stringify(cards,null,2)],{type:'application/json'});
+  const url=URL.createObjectURL(blob); const a=document.createElement('a');
+  a.href=url; a.download='ro_ru_cards.json'; a.click(); URL.revokeObjectURL(url);
+}
+
+/* ===== Голос (TTS) ===== */
+const synth=window.speechSynthesis;
+let voices=[];
+function loadVoices(){ voices = synth.getVoices(); fillVoiceSel(); }
+function fillVoiceSel(){
+  const sel=document.getElementById('voiceSel'); const prev=sel.value; sel.innerHTML='';
+  voices.forEach(v=>{ const o=document.createElement('option'); o.value=v.name; o.textContent=`${v.name} [${v.lang}]`; sel.appendChild(o); });
+  if(prev) sel.value=prev;
+}
+if(synth){ loadVoices(); if(typeof speechSynthesis!=='undefined'){ speechSynthesis.onvoiceschanged=loadVoices; } }
+function speak(text){
+  if(!synth) return;
+  const u=new SpeechSynthesisUtterance(text);
+  u.lang='ro-RO';
+  u.volume=parseFloat(vol.value||'1');
+  u.rate=parseFloat(rate.value||'1');
+  const v = voices.find(v=>v.name===voiceSel.value) || voices.find(v=>v.lang.startsWith('ro')) || voices[0];
+  if(v) u.voice=v;
+  synth.cancel(); synth.speak(u);
+}
+
+/* ===== Утилиты/UI ===== */
+function hash(s){ let h=0,i=0; while(i<s.length){ h=(h<<5)-h + s.charCodeAt(i++)|0; } return (h>>>0).toString(36); }
+function toast(msg){ const t=document.getElementById('toast'); t.textContent=msg; t.style.display='block'; setTimeout(()=>t.style.display='none',1500); }
+
+const screens=['review','choice','dictate','manage'];
+Array.from(document.querySelectorAll('#modeTabs .tab')).forEach(el=> el.onclick=()=> showScreen(el.dataset.mode));
+function showScreen(name){
+  screens.forEach(s=>{
+    document.getElementById('screen-'+s).classList.toggle('hidden', s!==name);
+    document.querySelector(`.tab[data-mode="${s}"]`).classList.toggle('active', s===name);
+  });
+  if(name==='manage'){ renderList(); updateStats(); }
+  if(name==='review'){ setupReview(); }
+  if(name==='choice'){ setupChoice(); }
+  if(name==='dictate'){ setupDict(); }
+}
+
+/* ===== Кнопки верхней панели ===== */
+function syncDirUI(){
+  const pill=document.getElementById('dirPill');
+  const btnA=document.getElementById('startRO2RU');
+  const btnB=document.getElementById('startRU2RO');
+  if(reviewDirection==='ro2ru'){
+    pill.textContent='Режим: RO→RU';
+    btnA.classList.add('primary','activeDir'); btnA.classList.remove('ghost');
+    btnB.classList.remove('primary','activeDir'); btnB.classList.add('ghost');
+  }else{
+    pill.textContent='Режим: RU→RO';
+    btnB.classList.add('primary','activeDir'); btnB.classList.remove('ghost');
+    btnA.classList.remove('primary','activeDir'); btnA.classList.add('ghost');
+  }
+}
+function startSession(dir){
+  reviewDirection = dir;
+  localStorage.setItem('rr_dir', reviewDirection);
+  syncDirUI();
+  showScreen('review'); // сразу в карточки
+}
+document.getElementById('startRO2RU').onclick=()=> startSession('ro2ru');
+document.getElementById('startRU2RO').onclick=()=> startSession('ru2ro');
+
+document.getElementById('btnLeech').onclick=()=>{
+  leechOnly = !leechOnly;
+  document.getElementById('btnLeech').classList.toggle('primary', leechOnly);
+  showScreen('review');
+};
+document.getElementById('btnTTS').onclick=()=>{ if(current) speak(current.ro); };
+document.getElementById('btnExport').onclick=exportJSON;
+document.getElementById('btnAdd').onclick=()=>{
+  const ro=prompt('Румынское слово/фраза (ro)'); if(!ro) return;
+  const ru=prompt('Перевод на русский (ru)'); if(!ru) return;
+  importPairs([[ro,ru]]);
+};
+document.getElementById('btnWipe').onclick=()=>{
+  if(confirm('Удалить все карточки?')){
+    localStorage.removeItem(LS_KEY);
+    load(); renderList(); toast('База сброшена');
+  }
+};
+document.getElementById('btnSettings').onclick=()=> showScreen('manage');
+
+/* ===== Старт ===== */
+const voiceSel=document.getElementById('voiceSel'); const vol=document.getElementById('vol'); const rate=document.getElementById('rate');
+load(); setupReview(); updateStats();
+</script>
+</body>
+</html>
